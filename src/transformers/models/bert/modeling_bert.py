@@ -457,18 +457,22 @@ class BertSdpaSelfAttention(BertSelfAttention):
 class BertSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.config = config
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        if config.use_rezero == True:
-            self.alpha = 1/config.num_hidden_layers #* 0.33
-        else:
-            self.alpha = 1
+        #if config.use_rezero == True:
+        self.alpha = nn.Parameter(torch.zeros(1)) #* 0.33
+        #else:
+        #    self.alpha = 999999
 
     def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
-        hidden_states = self.LayerNorm(self.alpha * hidden_states + input_tensor)
+        if self.config.use_rezero == True:
+            hidden_states = self.LayerNorm(nn.Sigmoid()(self.alpha) * hidden_states + input_tensor)
+        else:
+            hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
 
 
@@ -547,18 +551,22 @@ class BertIntermediate(nn.Module):
 class BertOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.config = config
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        if config.use_rezero == True:
-            self.alpha = 1/config.num_hidden_layers #* 0.33
-        else:
-            self.alpha = 1
+        #if config.use_rezero == True:
+        self.alpha = nn.Parameter(torch.zeros(1)) #1/config.num_hidden_layers #* 0.33
+        #else:
+        #    self.alpha = 999999
 
     def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
-        hidden_states = self.LayerNorm(self.alpha * hidden_states + input_tensor)
+        if self.config.use_rezero == True:
+            hidden_states = self.LayerNorm(nn.Sigmoid()(self.alpha) * hidden_states + input_tensor)
+        else:
+            hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
 
 
