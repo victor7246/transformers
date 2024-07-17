@@ -114,6 +114,7 @@ class LongformerConfig(PretrainedConfig):
         initializer_range: float = 0.02,
         layer_norm_eps: float = 1e-12,
         onnx_export: bool = False,
+        use_rezero: bool = False,
         **kwargs,
     ):
         """Constructs LongformerConfig."""
@@ -136,6 +137,7 @@ class LongformerConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.onnx_export = onnx_export
+        self.use_rezero = use_rezero
 
 
 class LongformerOnnxConfig(OnnxConfig):

@@ -1124,14 +1124,19 @@ class LongformerSelfAttention(nn.Module):
 class LongformerSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.config = config
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.alpha = nn.Parameter(torch.zeros(1)) #* 0.33
 
     def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states + input_tensor)
+        if self.config.use_rezero == True:
+            hidden_states = self.LayerNorm(nn.Sigmoid()(self.alpha) * hidden_states + input_tensor)
+        else:
+            hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
 
 
@@ -1204,14 +1209,19 @@ class LongformerIntermediate(nn.Module):
 class LongformerOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.config = config
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.alpha = nn.Parameter(torch.zeros(1))
 
     def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states + input_tensor)
+        if self.config.use_rezero == True:
+            hidden_states = self.LayerNorm(nn.Sigmoid()(self.alpha) * hidden_states + input_tensor)
+        else:
+            hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
 
 
