@@ -115,7 +115,8 @@ class BertConfig(PretrainedConfig):
         use_cache=True,
         classifier_dropout=None,
         use_rezero=False,
-        discard_ratio=0.1,
+        discard_ratio=0.0,
+        num_sampling_repetitions=1,
         **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
@@ -137,6 +138,7 @@ class BertConfig(PretrainedConfig):
         self.classifier_dropout = classifier_dropout
         self.use_rezero = use_rezero
         self.discard_ratio = discard_ratio
+        self.num_sampling_repetitions = num_sampling_repetitions
 
 
 class BertOnnxConfig(OnnxConfig):

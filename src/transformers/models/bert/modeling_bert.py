@@ -543,26 +543,22 @@ class BertIntermediate(nn.Module):
         else:
             self.intermediate_act_fn = config.hidden_act
         self.discard_ratio = config.discard_ratio
+        self.num_sampling_repetitions = config.num_sampling_repetitions
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        # discard rows from weights according to discard_ratio
         num_rows = self.dense.weight.shape[0]
-        indices_to_keep = torch.randperm(num_rows)[int(num_rows * self.discard_ratio): ]
-        indices_to_keep = indices_to_keep.sort().values
-        logger.debug(f'num_rows: {num_rows}, indices_to_keep: {len(indices_to_keep)}')
-        logger.debug(f'reduced weight shape: {self.dense.weight[indices_to_keep, :].shape}')
-        logger.debug(f'reduced bias shape: {self.dense.bias[indices_to_keep].shape}')
-        logger.debug(f'hidden states shape: {hidden_states.shape}')
 
-        reduced_hidden_states = F.linear(hidden_states, self.dense.weight[indices_to_keep, :], self.dense.bias[indices_to_keep])
-        logger.debug(f'reduced_weight @ hidden_states shape: {reduced_hidden_states.shape}')
-
-        hidden_states = torch.zeros(hidden_states.shape[:2] + (self.dense.out_features, ))
-        hidden_states[:, :, indices_to_keep] = reduced_hidden_states
-        logger.debug(f'output hidden states shape: {hidden_states.shape}')
+        # discard rows from weights according to discard_ratio, and take averages
+        average = torch.zeros(hidden_states.shape[:2] + (self.dense.out_features, ), device=hidden_states.device)
+        for _ in range(self.num_sampling_repetitions):
+            indices_to_keep = torch.randperm(num_rows)[int(num_rows * self.discard_ratio): ]
+            indices_to_keep = indices_to_keep.sort().values
+            average[:, :, indices_to_keep] += F.linear(hidden_states, self.dense.weight[indices_to_keep, :], self.dense.bias[indices_to_keep])
+        hidden_states = average / self.num_sampling_repetitions
 
         hidden_states = self.intermediate_act_fn(hidden_states)
         self.activation_maps = hidden_states
+
         return hidden_states
 
 
