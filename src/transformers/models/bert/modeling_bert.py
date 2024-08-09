@@ -25,6 +25,7 @@ import torch
 import torch.utils.checkpoint
 from packaging import version
 from torch import nn
+from torch.nn import functional as F
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
@@ -532,19 +533,36 @@ class BertAttention(nn.Module):
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
 
-
 class BertIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.activation_maps = None
         if isinstance(config.hidden_act, str):
             self.intermediate_act_fn = ACT2FN[config.hidden_act]
         else:
             self.intermediate_act_fn = config.hidden_act
+        self.discard_ratio = config.discard_ratio
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
+        # discard rows from weights according to discard_ratio
+        num_rows = self.dense.weight.shape[0]
+        indices_to_keep = torch.randperm(num_rows)[int(num_rows * self.discard_ratio): ]
+        indices_to_keep = indices_to_keep.sort().values
+        logger.debug(f'num_rows: {num_rows}, indices_to_keep: {len(indices_to_keep)}')
+        logger.debug(f'reduced weight shape: {self.dense.weight[indices_to_keep, :].shape}')
+        logger.debug(f'reduced bias shape: {self.dense.bias[indices_to_keep].shape}')
+        logger.debug(f'hidden states shape: {hidden_states.shape}')
+
+        reduced_hidden_states = F.linear(hidden_states, self.dense.weight[indices_to_keep, :], self.dense.bias[indices_to_keep])
+        logger.debug(f'reduced_weight @ hidden_states shape: {reduced_hidden_states.shape}')
+
+        hidden_states = torch.zeros(hidden_states.shape[:2] + (self.dense.out_features, ))
+        hidden_states[:, :, indices_to_keep] = reduced_hidden_states
+        logger.debug(f'output hidden states shape: {hidden_states.shape}')
+
         hidden_states = self.intermediate_act_fn(hidden_states)
+        self.activation_maps = hidden_states
         return hidden_states
 
 
