@@ -542,19 +542,23 @@ class BertIntermediate(nn.Module):
             self.intermediate_act_fn = ACT2FN[config.hidden_act]
         else:
             self.intermediate_act_fn = config.hidden_act
+        self.use_row_sampling = config.use_row_sampling
         self.discard_ratio = config.discard_ratio
         self.num_sampling_repetitions = config.num_sampling_repetitions
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        num_rows = self.dense.weight.shape[0]
+        if self.use_row_sampling:
+            num_rows = self.dense.weight.shape[0]
 
-        # discard rows from weights according to discard_ratio, and take averages
-        average = torch.zeros(hidden_states.shape[:2] + (self.dense.out_features, ), device=hidden_states.device)
-        for _ in range(self.num_sampling_repetitions):
-            indices_to_keep = torch.randperm(num_rows)[int(num_rows * self.discard_ratio): ]
-            indices_to_keep = indices_to_keep.sort().values
-            average[:, :, indices_to_keep] += F.linear(hidden_states, self.dense.weight[indices_to_keep, :], self.dense.bias[indices_to_keep])
-        hidden_states = average / self.num_sampling_repetitions
+            # discard rows from weights according to discard_ratio, and take averages
+            average = torch.zeros(hidden_states.shape[:2] + (self.dense.out_features, ), device=hidden_states.device)
+            for _ in range(self.num_sampling_repetitions):
+                indices_to_keep = torch.randperm(num_rows)[int(num_rows * self.discard_ratio): ]
+                indices_to_keep = indices_to_keep.sort().values
+                average[:, :, indices_to_keep] += F.linear(hidden_states, self.dense.weight[indices_to_keep, :], self.dense.bias[indices_to_keep])
+            hidden_states = average / self.num_sampling_repetitions
+        else:
+            hidden_states = self.dense(hidden_states)
 
         hidden_states = self.intermediate_act_fn(hidden_states)
         self.activation_maps = hidden_states
