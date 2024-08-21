@@ -542,23 +542,27 @@ class BertIntermediate(nn.Module):
             self.intermediate_act_fn = ACT2FN[config.hidden_act]
         else:
             self.intermediate_act_fn = config.hidden_act
-        self.use_row_sampling = config.use_row_sampling
-        self.use_col_sampling = config.use_col_sampling
+        self.use_rowcol_sampling = config.use_rowcol_sampling
         self.row_discard_ratio = config.row_discard_ratio
         self.col_discard_ratio = config.col_discard_ratio
         self.num_sampling_repetitions = config.num_sampling_repetitions
 
+        # setting the row and column indices to work with
+        if self.use_rowcol_sampling:
+            num_rows = self.dense.weight.shape[0]
+            num_cols = self.dense.weight.shape[1]
+            self.row_indices = torch.randperm(num_rows)[int(num_rows * self.row_discard_ratio): ].sort().values
+            self.col_indices = torch.randperm(num_cols)[int(num_cols * self.col_discard_ratio): ].sort().values
+            
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         # hidden_states: (batch_size, maxlen, input_dim); input_dim = 768
         # self.dense.weight: (output_dim, input_dim); (3072, 768)
         # self.dense.bias: (output_dim, )
-        if self.use_row_sampling or self.use_col_sampling:
-            num_rows = self.dense.weight.shape[0]
-            num_cols = self.dense.weight.shape[1]
+        if self.use_rowcol_sampling:
             result = torch.zeros(hidden_states.shape[:2] + (self.dense.out_features, ), device=hidden_states.device)
-            row_indices = torch.randperm(num_rows)[int(num_rows * self.row_discard_ratio): ].sort().values
-            col_indices = torch.randperm(num_cols)[int(num_cols * self.col_discard_ratio): ].sort().values
-            result[:, :, row_indices] = F.linear(hidden_states[:, :, col_indices], (self.dense.weight[row_indices, :])[:, col_indices], self.dense.bias[row_indices])
+            result[:, :, self.row_indices] = F.linear(
+                hidden_states[:, :, self.col_indices],
+                self.reduced_weight, self.reduced_bias)
             hidden_states = result
         else:
             hidden_states = self.dense(hidden_states)

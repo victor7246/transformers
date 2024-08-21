@@ -115,8 +115,7 @@ class BertConfig(PretrainedConfig):
         use_cache=True,
         classifier_dropout=None,
         use_rezero=False,
-        use_row_sampling=False,
-        use_col_sampling=False,
+        use_rowcol_sampling=False,
         row_discard_ratio=0.0,
         col_discard_ratio=0.0,
         num_sampling_repetitions=1,
@@ -140,8 +139,7 @@ class BertConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.classifier_dropout = classifier_dropout
         self.use_rezero = use_rezero
-        self.use_row_sampling = use_row_sampling
-        self.use_col_sampling = use_col_sampling
+        self.use_rowcol_sampling = use_rowcol_sampling
         self.row_discard_ratio = row_discard_ratio
         self.col_discard_ratio = col_discard_ratio
         self.num_sampling_repetitions = num_sampling_repetitions
