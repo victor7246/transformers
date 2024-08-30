@@ -115,6 +115,10 @@ class LongformerConfig(PretrainedConfig):
         layer_norm_eps: float = 1e-12,
         onnx_export: bool = False,
         use_rezero: bool = False,
+        use_rowcol_sampling=False,
+        row_discard_ratio=0.0,
+        col_discard_ratio=0.0,
+        num_sampling_repetitions=1,
         **kwargs,
     ):
         """Constructs LongformerConfig."""
@@ -138,6 +142,10 @@ class LongformerConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.onnx_export = onnx_export
         self.use_rezero = use_rezero
+        self.use_rowcol_sampling = use_rowcol_sampling
+        self.row_discard_ratio = row_discard_ratio
+        self.col_discard_ratio = col_discard_ratio
+        self.num_sampling_repetitions = num_sampling_repetitions
 
 
 class LongformerOnnxConfig(OnnxConfig):

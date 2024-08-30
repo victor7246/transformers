@@ -21,6 +21,7 @@ from typing import Optional, Tuple, Union
 import torch
 import torch.utils.checkpoint
 from torch import nn
+from torch.nn import functional as F
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN, gelu
@@ -1194,14 +1195,31 @@ class LongformerIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.activation_maps = None
         if isinstance(config.hidden_act, str):
             self.intermediate_act_fn = ACT2FN[config.hidden_act]
         else:
             self.intermediate_act_fn = config.hidden_act
 
+        self.use_rowcol_sampling = config.use_rowcol_sampling
+        self.row_discard_ratio = config.row_discard_ratio
+        self.col_discard_ratio = config.col_discard_ratio
+        self.num_sampling_repetitions = config.num_sampling_repetitions
+
+        # setting the row and column indices to work with
+        if self.use_rowcol_sampling:
+            num_rows = self.dense.weight.shape[0]
+            num_cols = self.dense.weight.shape[1]
+            self.row_indices = torch.randperm(num_rows)[int(num_rows * self.row_discard_ratio): ].sort().values
+            self.col_indices = torch.randperm(num_cols)[int(num_cols * self.col_discard_ratio): ].sort().values
+
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        # hidden_states: (batch_size, maxlen, input_dim); input_dim = 768
+        # self.dense.weight: (output_dim, input_dim); (3072, 768)
+        # self.dense.bias: (output_dim, )
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
+        self.activation_maps = hidden_states
         return hidden_states
 
 
