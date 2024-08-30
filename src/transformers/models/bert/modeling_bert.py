@@ -558,18 +558,9 @@ class BertIntermediate(nn.Module):
         # hidden_states: (batch_size, maxlen, input_dim); input_dim = 768
         # self.dense.weight: (output_dim, input_dim); (3072, 768)
         # self.dense.bias: (output_dim, )
-        if self.use_rowcol_sampling:
-            result = torch.zeros(hidden_states.shape[:2] + (self.dense.out_features, ), device=hidden_states.device)
-            result[:, :, self.row_indices] = F.linear(
-                hidden_states[:, :, self.col_indices],
-                self.reduced_weight, self.reduced_bias)
-            hidden_states = result
-        else:
-            hidden_states = self.dense(hidden_states)
-
+        hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
         self.activation_maps = hidden_states
-
         return hidden_states
 
 
