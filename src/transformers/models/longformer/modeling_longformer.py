@@ -1981,6 +1981,8 @@ class LongformerForSequenceClassification(LongformerPreTrainedModel):
                 loss_fct = BCEWithLogitsLoss()
                 loss = loss_fct(logits, labels)
 
+        # add the KL divergence loss term here
+
         if not return_dict:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output

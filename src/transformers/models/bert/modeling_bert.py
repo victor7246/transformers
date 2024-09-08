@@ -537,6 +537,7 @@ class BertIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.row_sparsities = nn.Parameter(torch.ones(config.intermediate_size))
         self.activation_maps = None
         if isinstance(config.hidden_act, str):
             self.intermediate_act_fn = ACT2FN[config.hidden_act]
@@ -554,11 +555,68 @@ class BertIntermediate(nn.Module):
             self.row_indices = torch.randperm(num_rows)[int(num_rows * self.row_discard_ratio): ].sort().values
             self.col_indices = torch.randperm(num_cols)[int(num_cols * self.col_discard_ratio): ].sort().values
             
+    """
+    row_sparsities = torch.ones(3072, device=device)
+    rows_to_keep = torch.zeros(3072, device=device, dtype=torch.bool) 
+    for row_idx in range(3072):
+        eps = torch.rand(1).item()                                 # the U(0, 1) noise
+        alpha = torch.sigmoid(row_sparsities[row_idx]).item()       # the Bernoulli distribution mean to be used
+
+        if (eps * alpha) / (eps * alpha + (1 - eps) * (1 - alpha)) <= 0.5:
+            # drop the row
+            rows_to_keep.append(row_idx) 
+
+    # checking the safe tensors file
+    import torch
+    from safetensors.torch import load_file
+    from torch import nn
+    safetensors_file = "tempdir/model.safetensors"
+
+    # Load the weights from the .safetensors file
+    state_dict = load_file(safetensors_file)
+
+    # check the tensors
+    for i in range(12):
+        state_dict[f"bert.encoder.layer.{i}.intermediate.row_sparsities"].sum()
+
+    row_sparsities = torch.ones(3072, device=device)
+    eps = torch.rand(3072, device=device)
+    alpha = torch.sigmoid(row_sparsities)  # Shape: (num_rows, )
+    keep_probs = (eps * alpha) / (eps * alpha + (1 - eps) * (1 - alpha))
+    rows_to_keep = keep_probs <= 0.5
+    
+    """
+
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         # hidden_states: (batch_size, maxlen, input_dim); input_dim = 768
         # self.dense.weight: (output_dim, input_dim); (3072, 768)
         # self.dense.bias: (output_dim, )
-        hidden_states = self.dense(hidden_states)
+        if self.training:
+            # in training mode, so we don't care about the inference time
+            # we'll take multiple samples and then average out the results
+            average = torch.zeros(hidden_states.shape[:2] + (self.dense.out_features, ), device=hidden_states.device) 
+            for _ in range(self.num_sampling_repetitions): 
+                # for each row, do a sample from it's bernoulli distribution 
+                # we use the reparametrization trick here
+                eps = torch.rand(self.dense.out_features, device=hidden_states.device)
+                alpha = torch.sigmoid(self.row_sparsities)  # Shape: (num_rows, )
+
+                # Calculate the probabilities using reparametrization trick
+                keep_probs = (eps * alpha) / (eps * alpha + (1 - eps) * (1 - alpha))
+
+                # Use the keep_probs as a mask to determine which rows to keep
+                rows_to_keep = keep_probs <= 0.5
+
+                # do the slicing here by indexing
+                # average[:, :, rows_to_keep] += F.linear(hidden_states, self.dense.weight[rows_to_keep, :], self.dense.bias[rows_to_keep])
+                average[:, :, rows_to_keep] += hidden_states @ (self.dense.weight[rows_to_keep, :]).T + self.dense.bias[rows_to_keep]
+
+            # take the average of all the results
+            hidden_states = average / self.num_sampling_repetitions
+        else:
+            # in eval mode, so no need to sample here
+            # it is assumed that weights are already sliced here
+            hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
         self.activation_maps = hidden_states
         return hidden_states

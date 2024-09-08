@@ -118,7 +118,7 @@ class BertConfig(PretrainedConfig):
         use_rowcol_sampling=False,
         row_discard_ratio=0.0,
         col_discard_ratio=0.0,
-        num_sampling_repetitions=1,
+        num_sampling_repetitions=10,
         **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
