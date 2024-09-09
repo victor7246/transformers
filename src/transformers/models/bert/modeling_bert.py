@@ -543,6 +543,8 @@ class BertIntermediate(nn.Module):
             self.intermediate_act_fn = ACT2FN[config.hidden_act]
         else:
             self.intermediate_act_fn = config.hidden_act
+        
+        
         self.use_rowcol_sampling = config.use_rowcol_sampling
         self.row_discard_ratio = config.row_discard_ratio
         self.col_discard_ratio = config.col_discard_ratio
@@ -554,7 +556,8 @@ class BertIntermediate(nn.Module):
             num_cols = self.dense.weight.shape[1]
             self.row_indices = torch.randperm(num_rows)[int(num_rows * self.row_discard_ratio): ].sort().values
             self.col_indices = torch.randperm(num_cols)[int(num_cols * self.col_discard_ratio): ].sort().values
-            
+        
+
     """
     row_sparsities = torch.ones(3072, device=device)
     rows_to_keep = torch.zeros(3072, device=device, dtype=torch.bool) 
@@ -591,9 +594,10 @@ class BertIntermediate(nn.Module):
         # hidden_states: (batch_size, maxlen, input_dim); input_dim = 768
         # self.dense.weight: (output_dim, input_dim); (3072, 768)
         # self.dense.bias: (output_dim, )
-        if self.training:
+        if self.training and self.use_rowcol_sampling:
             # in training mode, so we don't care about the inference time
             # we'll take multiple samples and then average out the results
+
             average = torch.zeros(hidden_states.shape[:2] + (self.dense.out_features, ), device=hidden_states.device) 
             for _ in range(self.num_sampling_repetitions): 
                 # for each row, do a sample from it's bernoulli distribution 
@@ -613,6 +617,9 @@ class BertIntermediate(nn.Module):
 
             # take the average of all the results
             hidden_states = average / self.num_sampling_repetitions
+
+            #hidden_states = hidden_states @ (self.dense.weight[self.rows_to_keep, :]).T + self.dense.bias[self.rows_to_keep]
+
         else:
             # in eval mode, so no need to sample here
             # it is assumed that weights are already sliced here
